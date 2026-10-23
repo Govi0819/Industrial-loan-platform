@@ -85,12 +85,103 @@ def assess_dscr(dscr, minimum_dscr):
     else:
         return "Cannot Fully Cover Debt"
 
+def calculate_fccr(
+    cash_available,
+    cash_taxes,
+    capital_expenditure,
+    annual_loan_payment,
+    lease_payments
+):
+    total_fixed_payments = annual_loan_payment + lease_payments
+
+    if cash_taxes < 0:
+        raise ValueError("Cash taxes cannot be negative")
+
+    if capital_expenditure < 0:
+        raise ValueError("Capital expenditure cannot be negative")
+
+    if lease_payments < 0:
+        raise ValueError("Lease payments cannot be negative")
+
+    if total_fixed_payments <= 0:
+        raise ValueError("Total fixed payments must be greater than zero")
+
+    cash_after_required_spending = (
+        cash_available
+        - cash_taxes
+        - capital_expenditure
+    )
+
+    return cash_after_required_spending / total_fixed_payments
+
+
+def calculate_max_affordable_payment(
+    cash_available,
+    cash_taxes,
+    capital_expenditure,
+    lease_payments,
+    minimum_dscr,
+    minimum_fccr
+):
+    if minimum_dscr <= 0:
+        raise ValueError("Minimum DSCR must be greater than zero")
+
+    if minimum_fccr <= 0:
+        raise ValueError("Minimum FCCR must be greater than zero")
+
+    if cash_taxes < 0:
+        raise ValueError("Cash taxes cannot be negative")
+
+    if capital_expenditure < 0:
+        raise ValueError("Capital expenditure cannot be negative")
+
+    if lease_payments < 0:
+        raise ValueError("Lease payments cannot be negative")
+
+    max_payment_dscr = cash_available / minimum_dscr
+
+    max_payment_fccr = (
+        cash_available
+        - cash_taxes
+        - capital_expenditure
+    ) / minimum_fccr - lease_payments
+
+    strictest_payment_limit = min(
+        max_payment_dscr,
+        max_payment_fccr
+    )
+
+    return max(0, strictest_payment_limit)
+
+
+def calculate_maximum_loan(
+    max_annual_payment,
+    interest_rate,
+    loan_term
+):
+    if max_annual_payment <= 0:
+        return 0
+
+    if interest_rate < 0:
+        raise ValueError("Interest rate cannot be negative")
+
+    if loan_term <= 0:
+        raise ValueError("Loan term must be greater than zero")
+
+    if interest_rate == 0:
+        return max_annual_payment * loan_term
+
+    growth_factor = (1 + interest_rate) ** loan_term
+
+    maximum_loan = (
+        max_annual_payment * (growth_factor - 1)
+    ) / (interest_rate * growth_factor)
+
+    return maximum_loan
+
 
 def format_currency(value):
     return f"${value:,.2f}"
-
-
-
 
 def analyze_loan(
     production_tonnes,
@@ -100,12 +191,12 @@ def analyze_loan(
     loan_amount,
     interest_rate,
     loan_term,
-    minimum_dscr
+    minimum_dscr,
+    cash_taxes,
+    capital_expenditure,
+    lease_payments,
+    minimum_fccr
 ):
-
-   
-
-    
     revenue = calculate_revenue(
         production_tonnes,
         price_per_tonne
@@ -133,9 +224,32 @@ def analyze_loan(
         annual_payment
     )
 
+    fccr = calculate_fccr(
+        cash_available,
+        cash_taxes,
+        capital_expenditure,
+        annual_payment,
+        lease_payments
+    )
+
     risk_assessment = assess_dscr(
         dscr,
         minimum_dscr
+    )
+
+    max_affordable_payment = calculate_max_affordable_payment(
+        cash_available,
+        cash_taxes,
+        capital_expenditure,
+        lease_payments,
+        minimum_dscr,
+        minimum_fccr
+    )
+
+    maximum_loan = calculate_maximum_loan(
+        max_affordable_payment,
+        interest_rate,
+        loan_term
     )
 
     return {
@@ -144,12 +258,11 @@ def analyze_loan(
         "cash_available": cash_available,
         "annual_payment": annual_payment,
         "dscr": dscr,
-        "risk_assessment": risk_assessment
+        "fccr": fccr,
+        "risk_assessment": risk_assessment,
+        "max_affordable_payment": max_affordable_payment,
+        "maximum_loan": maximum_loan
     }
-    
-
-
-
 
 
 
@@ -158,10 +271,16 @@ price_per_tonne = 300
 variable_cost_per_tonne = 180
 fixed_costs = 50_000_000
 
-minimum_dscr=1.25
 loan_amount = 150_000_000
 interest_rate = 0.06
 loan_term = 5
+
+cash_taxes = 5_000_000
+capital_expenditure = 8_000_000
+lease_payments = 2_000_000
+
+minimum_dscr = 1.25
+minimum_fccr = 1.20
 
 
 results = analyze_loan(
@@ -172,12 +291,31 @@ results = analyze_loan(
     loan_amount,
     interest_rate,
     loan_term,
-    minimum_dscr
+    minimum_dscr,
+    cash_taxes,
+    capital_expenditure,
+    lease_payments,
+    minimum_fccr
 )
 
-print(format_currency(results["revenue"]))
-print(format_currency(results["operating_cost"]))
-print(format_currency(results["cash_available"]))
-print(format_currency(results["annual_payment"]))
-print(f'{results["dscr"]:.2f}')
-print(results["risk_assessment"])
+
+print("Revenue:", format_currency(results["revenue"]))
+print("Operating cost:", format_currency(results["operating_cost"]))
+print("Cash available:", format_currency(results["cash_available"]))
+print("Annual payment:", format_currency(results["annual_payment"]))
+print(f'DSCR: {results["dscr"]:.2f}')
+print(f'FCCR: {results["fccr"]:.2f}')
+print("Risk assessment:", results["risk_assessment"])
+print(
+    "Maximum affordable annual payment:",
+    format_currency(results["max_affordable_payment"])
+)
+print(
+    "Maximum affordable loan:",
+    format_currency(results["maximum_loan"])
+)
+
+
+
+
+
